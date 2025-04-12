@@ -181,15 +181,32 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
     # Group by x-axis and calculate sum for each y-axis
     if not y_axes:
         return {'labels': [], 'datasets': []}
-        
-    pivoted_data = pd.pivot_table(df, values=y_axes[0]['column'], index=x_axis, aggfunc='sum')
     
+    # Handle empty DataFrame case
+    if df.empty:
+        return {'labels': [], 'datasets': []}
+        
+    # Get all unique x-axis values upfront to ensure consistent labels
+    all_x_values = sorted(df[x_axis].dropna().unique().tolist())
+    
+    # Create a new DataFrame with all x-axis values
+    base_df = pd.DataFrame({x_axis: all_x_values})
+    
+    # Start with first y-axis
+    pivoted_data = pd.pivot_table(df, values=y_axes[0]['column'], index=x_axis, aggfunc='sum')
+    pivoted_data = pivoted_data.reset_index()
+    
+    # Make sure we include all x-axis values
+    pivoted_data = pd.merge(base_df, pivoted_data, on=x_axis, how='left')
+    
+    # Add other y-axes
     for i in range(1, len(y_axes)):
         y_axis = y_axes[i]['column']
         temp_pivot = pd.pivot_table(df, values=y_axis, index=x_axis, aggfunc='sum')
-        pivoted_data = pd.merge(pivoted_data, temp_pivot, left_index=True, right_index=True)
-    
-    pivoted_data = pivoted_data.reset_index()
+        temp_pivot = temp_pivot.reset_index()
+        
+        # Make sure we include all x-axis values
+        pivoted_data = pd.merge(pivoted_data, temp_pivot, on=x_axis, how='left')
     
     # Create chart data structure
     chart_data = {
@@ -202,7 +219,13 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
         y_axis = y_axis_info.get('column')
         color = y_axis_info.get('color', f'rgba(75, 192, 192, {0.8 if i == 0 else 0.6})')
         
-        values = pivoted_data[y_axis].tolist()
+        values = []
+        for val in pivoted_data[y_axis].tolist():
+            # Preserve null/NaN values instead of converting to 0
+            if pd.isna(val):
+                values.append(None)
+            else:
+                values.append(val)
         
         # For percentage stacked bars, convert to percentages
         if chart_type == 'percentStackedBar':
@@ -214,10 +237,12 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
                     if not pd.isna(val):
                         totals[k] += abs(val)
             
-            # Convert to percentages
+            # Convert to percentages while preserving null values
             percent_values = []
             for j, val in enumerate(values):
-                if totals[j] > 0:
+                if val is None:
+                    percent_values.append(None)
+                elif totals[j] > 0:
                     percent_values.append((abs(val) / totals[j]) * 100)
                 else:
                     percent_values.append(0)
@@ -243,8 +268,11 @@ def process_standard_chart(df, x_axis, y_axes, chart_type):
     if df.empty:
         return {'labels': [], 'datasets': []}
         
+    # Get all unique x-axis values upfront to ensure consistent labels
+    all_x_values = sorted(df[x_axis].dropna().unique().tolist())
+    
     chart_data = {
-        'labels': df[x_axis].unique().tolist(),
+        'labels': all_x_values,
         'datasets': []
     }
     
@@ -257,12 +285,22 @@ def process_standard_chart(df, x_axis, y_axes, chart_type):
         grouped_data = df.groupby(x_axis)[y_axis].sum().reset_index()
         
         # Create a dataframe with all possible x-axis values to handle missing values
-        all_x = pd.DataFrame({x_axis: chart_data['labels']})
-        merged_data = pd.merge(all_x, grouped_data, on=x_axis, how='left').fillna(0)
+        all_x = pd.DataFrame({x_axis: all_x_values})
+        
+        # Use left join but DON'T fill NaN values with 0
+        merged_data = pd.merge(all_x, grouped_data, on=x_axis, how='left')
+        
+        # Convert NaN to None in the dataset
+        values = []
+        for val in merged_data[y_axis].tolist():
+            if pd.isna(val):
+                values.append(None)
+            else:
+                values.append(val)
         
         dataset = {
             'label': y_axis,
-            'data': merged_data[y_axis].tolist(),
+            'data': values,
             'backgroundColor': color,
             'borderColor': color,
             'borderWidth': 1
@@ -272,6 +310,7 @@ def process_standard_chart(df, x_axis, y_axes, chart_type):
         if chart_type == 'line':
             dataset['fill'] = False
             dataset['tension'] = 0
+            dataset['spanGaps'] = False  # Add this for line charts to not connect points across null values
         
         # Additional properties for radar charts
         if chart_type == 'radar':
@@ -281,4 +320,4 @@ def process_standard_chart(df, x_axis, y_axes, chart_type):
         
         chart_data['datasets'].append(dataset)
         
-    return chart_data 
+    return chart_data

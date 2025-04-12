@@ -50,13 +50,20 @@ export const ChartGenerator = {
                     const totals = Array(this.chartData.labels.length).fill(0);
                     this.chartData.datasets.forEach(dataset => {
                         dataset.data.forEach((value, index) => {
-                            totals[index] += Number(value) || 0;
+                            // Only add value to total if it's not null
+                            if (value !== null && value !== undefined) {
+                                totals[index] += Number(value) || 0;
+                            }
                         });
                     });
                     
                     // Convert each value to percentage
                     this.chartData.datasets.forEach(dataset => {
                         dataset.data = dataset.data.map((value, index) => {
+                            // Preserve null values
+                            if (value === null || value === undefined) {
+                                return null;
+                            }
                             return totals[index] > 0 ? ((Number(value) || 0) / totals[index]) * 100 : 0;
                         });
                     });
@@ -110,13 +117,20 @@ export const ChartGenerator = {
                     const totals = Array(this.chartData.labels.length).fill(0);
                     this.chartData.datasets.forEach(dataset => {
                         dataset.data.forEach((value, index) => {
-                            totals[index] += Number(value) || 0;
+                            // Only add value to total if it's not null
+                            if (value !== null && value !== undefined) {
+                                totals[index] += Number(value) || 0;
+                            }
                         });
                     });
                     
                     // Convert each value to percentage
                     this.chartData.datasets.forEach(dataset => {
                         dataset.data = dataset.data.map((value, index) => {
+                            // Preserve null values
+                            if (value === null || value === undefined) {
+                                return null;
+                            }
                             return totals[index] > 0 ? ((Number(value) || 0) / totals[index]) * 100 : 0;
                         });
                     });
@@ -338,7 +352,10 @@ export const ChartGenerator = {
                                    dataset.data;
             
             originalValues.forEach((value, index) => {
-                totals[index] += Number(value) || 0;
+                // Only add value to total if it's not null
+                if (value !== null && value !== undefined) {
+                    totals[index] += Number(value) || 0;
+                }
             });
         });
         
@@ -351,6 +368,10 @@ export const ChartGenerator = {
             
             // Calculate new percentages
             dataset.data = originalValues.map((value, index) => {
+                // Preserve null values
+                if (value === null || value === undefined) {
+                    return null;
+                }
                 return totals[index] > 0 ? ((Number(value) || 0) / totals[index]) * 100 : 0;
             });
         });
@@ -557,6 +578,11 @@ export const ChartGenerator = {
                         size: 13
                     },
                     formatter: function(value) {
+                        // Handle null values
+                        if (value === null || value === undefined) {
+                            return '';
+                        }
+                        
                         // Format to 1 decimal place
                         const percentage = parseFloat(value).toFixed(1);
                         
@@ -590,8 +616,18 @@ export const ChartGenerator = {
             options.plugins.tooltip.callbacks.label = function(context) {
                 const label = context.label || '';
                 const value = context.raw;
-                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-                const percentage = ((value / total) * 100).toFixed(1);
+                
+                // Skip null values in total calculation
+                const total = context.chart.data.datasets[0].data.reduce((a, b) => {
+                    return a + (b !== null && b !== undefined ? b : 0);
+                }, 0);
+                
+                // Handle null values in display
+                if (value === null || value === undefined) {
+                    return `${label}: No data`;
+                }
+                
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
                 return `${label}: ${formatIndianNumber(value)} (${percentage}%)`;
             };
         } else if (chartType === 'scatter' || chartType === 'bubble') {

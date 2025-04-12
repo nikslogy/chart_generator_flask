@@ -43,7 +43,10 @@ def calculate_percentage_data(datasets, labels, visible_indices=None):
         # Only process visible datasets for the result
         if idx in visible_indices:
             for i, value in enumerate(dataset['data']):
-                if i < len(totals) and totals[i] > 0:
+                if value is None:
+                    # Preserve null values
+                    percentage_data.append(None)
+                elif i < len(totals) and totals[i] > 0:
                     val = abs(float(value)) if value is not None else 0
                     percentage_data.append((val / totals[i]) * 100)
                 else:

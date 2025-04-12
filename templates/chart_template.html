@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ chart_title }}</title>
+    <!-- Use Chart.js v2.9 for better compatibility -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
+    <!-- Old version of datalabels plugin that works with Chart.js v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@0.7.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: Lato; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .chart-container { 
+            max-width: 1000px; 
+            margin: 0 auto 20px auto; 
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+        }
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .chart-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #2c3e50;
+            flex-grow: 1;
+            text-align: center;
+            margin-left: 90px;
+        }
+        .chart-logo {
+            width: 90px;
+            height: auto;
+        }
+        .chart-filter-controls {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .chart-filter-group {
+            display: flex;
+            align-items: center;
+        }
+        .chart-filter-group label {
+            margin-right: 5px;
+            font-size: 12px;
+            color: black;
+        }
+        .chart-filter-group select {
+            padding: 6px 5px;
+            color: rgb(0, 0, 0);
+            border: 1px solid #863F3F;
+            font-size: 12px;
+            min-width: 100px;
+        }
+        .chart-canvas-container {
+            height: 500px;
+            width: 100%;
+        }
+        .chart-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            padding-top: 5px;
+            border-top: 1px solid #e9ecef;
+        }
+        .chart-info {
+            flex: 1;
+        }
+        .chart-description {
+            margin-top: 0;
+            padding: 2px;
+            font-size: 10px;
+            padding-left: 70px;
+        }
+        .chart-additional-info {
+            margin-top: 2px;
+            padding: 2px;
+            font-size: 10px;
+            padding-left: 70px;
+        }
+        .chart-actions {
+            display: flex;
+            align-items: flex-start;
+            margin-left: 15px;
+        }
+        .chart-date {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #6c757d;
+            padding: 0;
+            margin: 0;
+            margin-top: 7px;
+        }
+        .icon-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        /* Force square legend markers - improved */
+        .chartjs-legend-item span,
+        .chartjs-legend-item span,
+        #myChart + .chartjs-legend li span,
+        #myChart + .chartjs-legend-event-container li span,
+        .chartjs-legend li span {
+        display: inline-block !important;
+        width: 12px !important;
+        height: 12px !important;
+        margin-right: 8px !important;
+        border-radius: 0 !important;
+    }
+        /* Target Chart.js legend items directly */
+        .chartjs-legend-item,
+        .chartjs-legend-item span {
+            border-radius: 0 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">{{ chart_title }}</div>
+            <img class="chart-logo" src="C:\Users\nikit\Downloads\logo.png" alt="Logo">
+        </div>
+        
+        {% if filter_column and filter_values %}
+        <div class="chart-filter-controls">
+            <div class="chart-filter-group">
+                <label for="chartFilter">{{ filter_column }}</label>
+                <select id="chartFilter">
+                    <option value="">All Values</option>
+                    {% for val in filter_values %}
+                    <option value="{{ val }}"{% if val == selected_filter %} selected{% endif %}>{{ val }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="chart-canvas-container">
+            <canvas id="myChart"></canvas>
+        </div>
+        
+        <div class="chart-footer">
+            <div class="chart-info">
+                {% if chart_description %}
+                <span class="chart-description">Source: {{ chart_description }}</span>
+                {% endif %}
+                {% if chart_additional_info %}
+                <div class="chart-additional-info">{{ chart_additional_info }}</div>
+                {% endif %}
+            </div>
+            <div class="chart-actions">
+                <button id="downloadChartBtn" class="icon-btn" title="Download Chart">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Define chart variables and functions in global scope -->
+    <script>
+        // Make chart and data accessible globally
+        var chart;
+        var originalChartData;
+        var preFilteredData;
+        
+        // Define filterChartData function in global scope
+        function filterChartData() {
+            const filterValue = document.getElementById('chartFilter').value;
+            
+            if (!chart || !chart.data) return;
+            
+            try {
+                // Store current dataset visibility
+                const visibility = [];
+                chart.data.datasets.forEach((dataset, index) => {
+                    visibility.push(!chart.getDatasetMeta(index).hidden);
+                });
+                
+                // Handle the "All Values" option
+                if (!filterValue) {
+                    // Reset to full data
+                    chart.data.labels = originalChartData.labels;
+                    chart.data.datasets.forEach((dataset, i) => {
+                        dataset.data = originalChartData.datasets[i].data;
+                    });
+                // Use pre-filtered data if available
+                } else if (preFilteredData && preFilteredData[filterValue]) {
+                    // Use pre-filtered data from the server
+                    const filteredData = preFilteredData[filterValue];
+                    
+                    // Check if we have valid data
+                    if (filteredData && filteredData.labels && filteredData.datasets) {
+                        // Update labels and datasets
+                        chart.data.labels = filteredData.labels;
+                        
+                        // Update each dataset's data while preserving other properties
+                        filteredData.datasets.forEach((dataset, i) => {
+                            if (i < chart.data.datasets.length) {
+                                chart.data.datasets[i].data = dataset.data;
+                            }
+                        });
+                    }
+                } else {
+                    // Fallback to client-side filtering if no pre-filtered data is available
+                    console.log("No pre-filtered data available for " + filterValue + ", using fallback filter");
+                    
+                    // Try exact match in x-axis labels (categorical data)
+                    const matchingIndices = [];
+                    originalChartData.labels.forEach((label, i) => {
+                        if (String(label).toLowerCase() === String(filterValue).toLowerCase()) {
+                            matchingIndices.push(i);
+                        }
+                    });
+                    
+                    if (matchingIndices.length > 0) {
+                        // Filter data to only show matching categories
+                        chart.data.labels = matchingIndices.map(i => originalChartData.labels[i]);
+                        chart.data.datasets.forEach((dataset, i) => {
+                            dataset.data = matchingIndices.map(i => originalChartData.datasets[i].data[i]);
+                        });
+                    } else {
+                        // No exact matches found, show message
+                        displayFilterMessage(filterValue);
+                    }
+                }
+                
+                // Restore dataset visibility that wasn't specifically changed
+                chart.data.datasets.forEach((dataset, index) => {
+                    if (chart.getDatasetMeta(index).hidden === undefined) {
+                        chart.getDatasetMeta(index).hidden = !visibility[index];
+                    }
+                });
+                
+                // Update the chart
+                chart.update();
+            } catch (error) {
+                console.error("Error filtering chart:", error);
+                // Show error message and reset to full data
+                displayFilterMessage(filterValue, true);
+                
+                // Reset to full data
+                chart.data.labels = originalChartData.labels;
+                chart.data.datasets.forEach((dataset, i) => {
+                    dataset.data = originalChartData.datasets[i].data;
+                });
+                chart.update();
+            }
+        }
+        
+        // Helper function to display filter messages (also in global scope)
+        function displayFilterMessage(filterValue, isError = false) {
+            const messageDiv = document.createElement('div');
+            
+            if (isError) {
+                messageDiv.style.cssText = 'padding: 10px; margin: 10px 0; background-color: #f8d7da; color: #721c24; border-radius: 4px; border-left: 4px solid #f5c6cb;';
+                messageDiv.innerHTML = '<strong>Error:</strong> Could not filter data for "' + filterValue + 
+                    '". Showing all values.';
+            } else {
+                messageDiv.style.cssText = 'padding: 10px; margin: 10px 0; background-color: #cfe8ff; color: #084298; border-radius: 4px; border-left: 4px solid #084298;';
+                messageDiv.innerHTML = '<strong>Note:</strong> No filter data available for "' + filterValue + 
+                    '". Showing all values.';
+            }
+            
+            messageDiv.className = 'filter-message';
+            
+            const chartContainer = document.querySelector('.chart-container');
+            const existingMessage = chartContainer.querySelector('.filter-message');
+            if (existingMessage) {
+                chartContainer.removeChild(existingMessage);
+            }
+            
+            const canvasContainer = document.querySelector('.chart-canvas-container');
+            chartContainer.insertBefore(messageDiv, canvasContainer);
+            
+            // Auto-remove after 4 seconds
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 4000);
+        }
+    </script>
+    
+    <!-- Initialize chart and add event listeners -->
+    <script>
+        // Initialize chart when the page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Register the datalabels plugin
+            if (window.Chart && window['chartjs-plugin-datalabels']) {
+                Chart.plugins.register(window['chartjs-plugin-datalabels']);
+            }
+            
+            // Disable legend interactivity globally
+            if (Chart.defaults && Chart.defaults.global) {
+                Chart.defaults.global.legend = Chart.defaults.global.legend || {};
+                Chart.defaults.global.legend.onClick = function() { return false; };
+            }
+            
+            // Set default for legend items to use rectangle style
+            Chart.defaults.global = Chart.defaults.global || {};
+            Chart.defaults.global.legend = Chart.defaults.global.legend || {};
+            Chart.defaults.global.legend.labels = Chart.defaults.global.legend.labels || {};
+            Chart.defaults.global.legend.labels.usePointStyle = false;
+            
+            // Format number in Indian format (e.g., 1,00,000)
+            function formatIndianNumber(num) {
+                if (num === null || num === undefined || isNaN(num)) return '';
+                
+                // Handle negative numbers
+                let isNegative = false;
+                if (num < 0) {
+                    isNegative = true;
+                    num = Math.abs(num);
+                }
+                
+                // For numbers less than 1,000, no special formatting needed
+                if (num < 1000) {
+                    return isNegative ? '-' + num.toString() : num.toString();
+                }
+                
+                // Convert to string and split at decimal point
+                const parts = num.toString().split('.');
+                let integerPart = parts[0];
+                
+                // First we get the last 3 digits
+                const lastThree = integerPart.substring(integerPart.length - 3);
+                // Then we get the remaining digits
+                const remaining = integerPart.substring(0, integerPart.length - 3);
+                
+                // Format the remaining digits with commas after every 2 digits
+                let formattedRemaining = '';
+                if (remaining) {
+                    formattedRemaining = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+                }
+                
+                // Combine the parts
+                let result = formattedRemaining ? formattedRemaining + ',' + lastThree : lastThree;
+                
+                // Add decimal part if exists
+                if (parts.length > 1) {
+                    result += '.' + parts[1];
+                }
+                
+                // Add negative sign if needed
+                if (isNegative) {
+                    result = '-' + result;
+                }
+                
+                return result;
+            }
+            
+            // Store original chart data for filtering (now using global variables)
+            originalChartData = {{ chart_data|safe }};
+            
+            // Pre-filtered data for each value (now using global variables)
+            preFilteredData = {{ complete_filtered_data|safe }};
+            
+            // Chart configuration
+            const ctx = document.getElementById('myChart').getContext('2d');
+            const chartData = {{ chart_data|safe }};
+            const chartOptions = {{ chart_options|safe }};
+            
+            // Create chart with updated configuration
+            chart = new Chart(ctx, {
+                type: '{{ chartjs_type }}',
+                data: chartData,
+                options: {
+                    ...chartOptions,
+                    plugins: {
+                        ...chartOptions.plugins,
+                        // Make sure title is not displayed as it's in the header
+                        title: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: '#863F3F',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgba(255, 255, 255, 0.2)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset ? context.dataset.label || '' : '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    
+                                    if (context.parsed && context.parsed.y !== null && context.parsed.y !== undefined) {
+                                        label += formatIndianNumber(context.parsed.y);
+                                    } else if (context.yLabel !== undefined) {
+                                        // Chart.js v2 compatibility
+                                        if (context.yLabel === null || context.yLabel === '') {
+                                            label += 'No data';
+                                        } else {
+                                            label += formatIndianNumber(context.yLabel);
+                                        }
+                                    } else {
+                                        label += 'No data';
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            onClick: function() { return false; }, // Disable legend click behavior
+                            labels: {
+                                boxWidth: 15,
+                                usePointStyle: false,
+                                padding: 15,
+                                fontColor: '#333',
+                                fontSize: 12
+                            }
+                        },
+                        datalabels: {
+                            ...chartOptions.plugins?.datalabels,
+                            formatter: function(value, context) {
+                                // For percent stacked bar charts
+                                if ('{{ chartjs_type }}' === 'bar' && chartOptions.scales?.yAxes?.[0]?.stacked) {
+                                    return value > 5 ? value.toFixed(1) + '%' : '';
+                                }
+                                return value;
+                            }
+                        }
+                    },
+                    // Chart.js v2 compatibility
+                    tooltips: {
+                        enabled: true,
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: '#863F3F',
+                        titleFontColor: 'white',
+                        bodyFontColor: 'white',
+                        borderColor: 'rgba(255, 255, 255, 0.2)',
+                        borderWidth: 1,
+                        xPadding: 10,
+                        yPadding: 10,
+                        callbacks: {
+                            label: function(tooltipItem, data) {
+                                var label = data.datasets[tooltipItem.datasetIndex].label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                
+                                // Check if the value is null, undefined or empty
+                                if (tooltipItem.yLabel === null || tooltipItem.yLabel === undefined || tooltipItem.yLabel === '') {
+                                    return label + 'No data';
+                                }
+                                
+                                return label + formatIndianNumber(tooltipItem.yLabel);
+                            }
+                        }
+                    },
+                    scales: {
+                        ...chartOptions.scales,
+                        x: {
+                            ...chartOptions.scales?.x,
+                            offset: true,
+                            grid: {
+                                drawTicks: true,
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                color: '#333'
+                            }
+                        },
+                        y: {
+                            ...chartOptions.scales?.y,
+                            offset: true,
+                            grid: {
+                                drawBorder: false
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return formatIndianNumber(value);
+                                },
+                                color: '#333'
+                            }
+                        }
+                    },
+                    // For Chart.js v2 compatibility with Indian number formatting
+                    scales: {
+                        ...chartOptions.scales,
+                        yAxes: [{
+                            ...chartOptions.scales?.yAxes?.[0],
+                            ticks: {
+                                ...chartOptions.scales?.yAxes?.[0]?.ticks,
+                                callback: function(value) {
+                                    return formatIndianNumber(value);
+                                },
+                                fontColor: '#333'
+                            }
+                        }],
+                        xAxes: [{
+                            ...chartOptions.scales?.xAxes?.[0],
+                            gridLines: {
+                                ...chartOptions.scales?.xAxes?.[0]?.gridLines,
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                ...chartOptions.scales?.xAxes?.[0]?.ticks,
+                                fontColor: '#333'
+                            }
+                        }]
+                    },
+                    spanGaps: false // Don't connect points across null values for line charts
+                }
+            });
+            
+            window.myChart = chart;
+            
+            // Force legend items to be square by overriding the draw function
+            if (Chart.Legend && Chart.Legend.prototype) {
+                const originalLegendItemRender = Chart.Legend.prototype.draw;
+                Chart.Legend.prototype.draw = function() {
+                    originalLegendItemRender.apply(this, arguments);
+                    
+                    // Force square legends
+                    if (this.chart.canvas && this.options.display) {
+                        const ctx = this.chart.ctx;
+                        const legends = document.querySelectorAll('.chartjs-legend-item');
+                        
+                        if (legends.length && legends[0] && legends[0].firstChild) {
+                            // Target the span that has the circular marker
+                            legends.forEach(function(legend) {
+                                const span = legend.querySelector('span');
+                                if (span) {
+                                    span.style.borderRadius = '0';
+                                    span.style.width = '12px';
+                                    span.style.height = '12px';
+                                    span.style.display = 'inline-block';
+                                }
+                            });
+                        }
+                    }
+                };
+            }
+            
+            // Force proper percentage display for percent stacked bar charts
+            if ('{{ chartjs_type }}' === 'bar' && chartOptions.scales?.yAxes?.[0]?.stacked) {
+                // Check if we need to modify the datalabels plugin
+                const datalabelsPlugin = Chart.plugins.getAll().find(p => p.id === 'datalabels');
+                if (datalabelsPlugin) {
+                    // Add or override formatter to ensure percentage signs
+                    if (!chart.options.plugins.datalabels.formatter) {
+                        chart.options.plugins.datalabels.formatter = function(value) {
+                            return value > 5 ? value.toFixed(1) + '%' : '';
+                        };
+                        chart.update();
+                    }
+                }
+            }
+            
+    // Force rectangular legend markers - enhanced version
+    if (chart.legend && chart.legend.legendItems) {
+    // 1. Set pointStyle to 'rect' for all legend items
+    chart.legend.legendItems.forEach(item => {
+        if (item) {
+            item.pointStyle = 'rect';
+        }
+    });
+    
+    // 2. Directly override the boxWidth and usePointStyle in options
+    if (chart.options.legend && chart.options.legend.labels) {
+        chart.options.legend.labels.usePointStyle = false;
+        chart.options.legend.labels.boxWidth = 12;
+        chart.options.legend.labels.boxHeight = 12;
+    }
+    
+    chart.update();
+    
+    // 3. Add direct DOM manipulation after a short delay to ensure rendering
+    setTimeout(function() {
+        const legendSpans = document.querySelectorAll('.chartjs-legend-item span');
+        legendSpans.forEach(function(span) {
+            span.style.borderRadius = '0';
+            span.style.width = '12px';
+            span.style.height = '12px';
+            span.style.display = 'inline-block';
+        });
+    }, 100);
+}
+            
+            // Completely disable legend click functionality after chart creation
+            if (chart.legend) {
+                const originalLegendOnClick = chart.legend.options.onClick;
+                chart.legend.options.onClick = function() { return false; };
+                
+                // Add CSS to indicate non-clickable legends
+                const legendContainer = chart.canvas.parentNode.querySelector('.chartjs-legend-container') || 
+                                       document.querySelector('.chartjs-legend');
+                
+                if (legendContainer) {
+                    // Add CSS to remove hover effects and pointer cursor
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        .chartjs-legend-item {
+                            cursor: default !important;
+                        }
+                        .chartjs-legend-item:hover {
+                            opacity: 1 !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+            }
+            
+            // Add event listener for filter
+            const filterElement = document.getElementById('chartFilter');
+            if (filterElement) {
+                filterElement.addEventListener('change', filterChartData);
+            }
+            
+            // Apply the initial filter value if one is selected
+            {% if selected_filter %}
+            setTimeout(() => filterChartData(), 100);
+            {% endif %}
+            
+            // Add download functionality
+            document.getElementById('downloadChartBtn').addEventListener('click', function() {
+            const originalCanvas = document.getElementById('myChart');
+
+            // Create a new canvas with same dimensions
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = originalCanvas.width;
+            tempCanvas.height = originalCanvas.height;
+
+            const ctx = tempCanvas.getContext('2d');
+
+            // Fill with white background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+            // Draw the original chart on top
+            ctx.drawImage(originalCanvas, 0, 0);
+
+            // Export image with white background
+            const image = tempCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = '{{ chart_title }}'.replace(/\s+/g, '_') + '.png';
+            link.href = image;
+            link.click();
+        });
+
+            
+            // Set up datalabels formatter if needed
+            if (chartOptions.plugins && chartOptions.plugins.datalabels) {
+                if (chartOptions.plugins.datalabels.usePercentageFormatter) {
+                    chartOptions.plugins.datalabels.formatter = function(value) {
+                        return value > 5 ? value.toFixed(1) + '%' : '';
+                    };
+                    delete chartOptions.plugins.datalabels.usePercentageFormatter;
+                }
+            }
+        });
+    </script>
+    
+    <!-- Additional script to fix percent signs and disable legend clicks -->
+    <script>
+        // Override Chart.js legend click behavior and fix formatting after the chart is loaded
+        window.addEventListener('load', function() {
+            if (window.myChart) {
+                // Replace the onClick function with a no-op function
+                if (window.myChart.legend) {
+                    window.myChart.legend.options.onClick = function() { return false; };
+                }
+                
+                // Fix percentage formatting for stacked bar charts
+                const chartType = '{{ chartjs_type }}';
+                const isStacked = window.myChart.options.scales && 
+                                 ((window.myChart.options.scales.yAxes && window.myChart.options.scales.yAxes[0].stacked) ||
+                                  (window.myChart.options.scales.y && window.myChart.options.scales.y.stacked));
+                
+                if (chartType === 'bar' && isStacked) {
+                    // Force percentage signs on data labels
+                    if (window.myChart.options.plugins && window.myChart.options.plugins.datalabels) {
+                        window.myChart.options.plugins.datalabels.formatter = function(value) {
+                            return value > 5 ? value.toFixed(1) + '%' : '';
+                        };
+                        
+                        // Apply the update
+                        window.myChart.update();
+                    }
+                }
+                
+                // Apply the change for legend click handling
+                window.myChart.update();
+                
+                // Add event listeners to prevent clicks on legend items
+                setTimeout(function() {
+                    const legendItems = document.querySelectorAll('.chartjs-legend-item');
+                    if (legendItems.length) {
+                        legendItems.forEach(function(item) {
+                            item.style.cursor = 'default';
+                            item.addEventListener('click', function(e) {
+                                e.stopPropagation();
+                                return false;
+                            }, true);
+                        });
+                    }
+                }, 500); // Small delay to ensure legend items are rendered
+            }
+        });
+    </script>
+</body>
+</html>
