@@ -224,8 +224,10 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
             # Preserve null/NaN values instead of converting to 0
             if pd.isna(val):
                 values.append(None)
+                print(f"Value is None: {val}")
             else:
                 values.append(val)
+                print(f"Value is not None: {val}")
         
         # For percentage stacked bars, convert to percentages
         if chart_type == 'percentStackedBar':
@@ -254,7 +256,7 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
             'data': values,
             'backgroundColor': color,
             'borderColor': color,
-            'borderWidth': 1
+            'borderWidth': 1,
         }
         
         chart_data['datasets'].append(dataset)
