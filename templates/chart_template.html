@@ -445,31 +445,36 @@
                     },
                     // Chart.js v2 compatibility
                     tooltips: {
-                        enabled: true,
-                        mode: 'index',
-                        intersect: false,
-                        backgroundColor: '#863F3F',
-                        titleFontColor: 'white',
-                        bodyFontColor: 'white',
-                        borderColor: 'rgba(255, 255, 255, 0.2)',
-                        borderWidth: 1,
-                        xPadding: 10,
-                        yPadding: 10,
-                        callbacks: {
-                            label: function(tooltipItem, data) {
-                                var label = data.datasets[tooltipItem.datasetIndex].label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                
-                                // Check if the value is null, undefined or empty
-                                if (tooltipItem.yLabel === null || tooltipItem.yLabel === undefined || tooltipItem.yLabel === '') {
-                                    return label + 'No data';
-                                }
-                                
-                                return label + formatIndianNumber(tooltipItem.yLabel);
+                    enabled: true,
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: '#863F3F',
+                    titleFontColor: 'white',
+                    bodyFontColor: 'white',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    borderWidth: 1,
+                    xPadding: 10,
+                    yPadding: 10,
+                    // Add this to the initial chart options setup where it handles tooltips
+                    // Replace the tooltip callbacks in Chart.js v2 section (around line 411)
+                    callbacks: {
+                        label: function(tooltipItem, data) {
+                            var label = data.datasets[tooltipItem.datasetIndex].label || '';
+                            if (label) {
+                                label += ': ';
                             }
+                            
+                            // Get the actual data value from the dataset
+                            var dataValue = data.datasets[tooltipItem.datasetIndex].data[tooltipItem.index];
+                            
+                            // Check if the value is null, undefined or empty string
+                            if (dataValue === null || dataValue === undefined || dataValue === '') {
+                                return label + 'No data';
+                            }
+                            
+                            return label + formatIndianNumber(tooltipItem.yLabel);
                         }
+                    }
                     },
                     scales: {
                         ...chartOptions.scales,

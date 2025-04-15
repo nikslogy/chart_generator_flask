@@ -329,55 +329,55 @@ export const ChartGenerator = {
         });
     },
     
-    // Recalculate percentages for stacked bar chart
-    recalculatePercentages: function() {
-        if (!this.currentChart) return;
+// Recalculate percentages for stacked bar chart
+recalculatePercentages: function() {
+    if (!this.currentChart) return;
+    
+    // Get indices of visible datasets
+    const visibleDatasets = [];
+    this.currentChart.data.datasets.forEach((dataset, index) => {
+        if (!this.currentChart.getDatasetMeta(index).hidden) {
+            visibleDatasets.push(index);
+        }
+    });
+    
+    // Calculate totals for each data point using only visible datasets
+    const totals = Array(this.currentChart.data.labels.length).fill(0);
+    visibleDatasets.forEach(datasetIndex => {
+        const dataset = this.currentChart.data.datasets[datasetIndex];
         
-        // Get indices of visible datasets
-        const visibleDatasets = [];
-        this.currentChart.data.datasets.forEach((dataset, index) => {
-            if (!this.currentChart.getDatasetMeta(index).hidden) {
-                visibleDatasets.push(index);
+        // Get original raw values (not percentages)
+        const originalValues = dataset.originalData || 
+                               (this.originalData?.datasets[datasetIndex]?.data) || 
+                               dataset.data;
+        
+        originalValues.forEach((value, index) => {
+            // Only add value to total if it's not null
+            if (value !== null && value !== undefined) {
+                totals[index] += Number(value) || 0;
             }
         });
+    });
+    
+    // Update percentages for all datasets
+    this.currentChart.data.datasets.forEach((dataset, datasetIndex) => {
+        // Get original raw values (not percentages)
+        const originalValues = dataset.originalData || 
+                               (this.originalData?.datasets[datasetIndex]?.data) || 
+                               dataset.data;
         
-        // Calculate totals for each data point using only visible datasets
-        const totals = Array(this.currentChart.data.labels.length).fill(0);
-        visibleDatasets.forEach(datasetIndex => {
-            const dataset = this.currentChart.data.datasets[datasetIndex];
-            
-            // Get original raw values (not percentages)
-            const originalValues = dataset.originalData || 
-                                   (this.originalData?.datasets[datasetIndex]?.data) || 
-                                   dataset.data;
-            
-            originalValues.forEach((value, index) => {
-                // Only add value to total if it's not null
-                if (value !== null && value !== undefined) {
-                    totals[index] += Number(value) || 0;
-                }
-            });
+        // Calculate new percentages
+        dataset.data = originalValues.map((value, index) => {
+            // Preserve null values
+            if (value === null || value === undefined) {
+                return null;
+            }
+            return totals[index] > 0 ? ((Number(value) || 0) / totals[index]) * 100 : 0;
         });
-        
-        // Update percentages for all datasets
-        this.currentChart.data.datasets.forEach((dataset, datasetIndex) => {
-            // Get original raw values (not percentages)
-            const originalValues = dataset.originalData || 
-                                   (this.originalData?.datasets[datasetIndex]?.data) || 
-                                   dataset.data;
-            
-            // Calculate new percentages
-            dataset.data = originalValues.map((value, index) => {
-                // Preserve null values
-                if (value === null || value === undefined) {
-                    return null;
-                }
-                return totals[index] > 0 ? ((Number(value) || 0) / totals[index]) * 100 : 0;
-            });
-        });
-        
-        this.currentChart.update();
-    },
+    });
+    
+    this.currentChart.update();
+},
     
     // Update existing chart with new data
     updateChart: function(chartData) {
@@ -409,78 +409,51 @@ export const ChartGenerator = {
         this.currentChart.update();
     },
     
-    // Create chart options based on chart type
-    createChartOptions: function(chartType) {
-        // Common options
-        const options = {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false, // Hide default legend, we'll use our custom one
-                    position: 'top',
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            
-                            // Handle different chart types
-                            if (chartType === 'pie' || chartType === 'doughnut' || chartType === 'polarArea') {
-                                let value = context.raw;
-                                label += formatIndianNumber(value);
-                            } else if (chartType === 'percentStackedBar') {
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toFixed(1) + '%';
+        // Create chart options based on chart type
+        createChartOptions: function(chartType) {
+            // Common options
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false, // Hide default legend, we'll use our custom one
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
                                 }
-                            } else if (chartType === 'scatter' || chartType === 'bubble') {
-                                label += `(${formatIndianNumber(context.parsed.x)}, ${formatIndianNumber(context.parsed.y)})`;
-                            } else {
-                                if (context.parsed.y !== null) {
+                                
+                                // Handle null values
+                                if (context.parsed.y === null || context.parsed.y === undefined) {
+                                    return label + 'No data';
+                                }
+                                
+                                // Handle different chart types
+                                if (chartType === 'pie' || chartType === 'doughnut' || chartType === 'polarArea') {
+                                    let value = context.raw;
+                                    label += formatIndianNumber(value);
+                                } else if (chartType === 'percentStackedBar') {
+                                    label += context.parsed.y.toFixed(1) + '%';
+                                } else if (chartType === 'scatter' || chartType === 'bubble') {
+                                    label += `(${formatIndianNumber(context.parsed.x)}, ${formatIndianNumber(context.parsed.y)})`;
+                                } else {
                                     label += formatIndianNumber(context.parsed.y);
                                 }
+                                
+                                return label;
                             }
-                            
-                            return label;
                         }
                     }
                 }
-            }
-        };
-        
-        // For Chart.js v2 compatibility
-        options.tooltips = {
-            callbacks: {
-                label: function(tooltipItem, data) {
-                    let label = data.datasets[tooltipItem.datasetIndex].label || '';
-                    if (label) {
-                        label += ': ';
-                    }
-                    
-                    if (chartType === 'percentStackedBar') {
-                        if (tooltipItem.yLabel !== null) {
-                            label += tooltipItem.yLabel.toFixed(1) + '%';
-                        }
-                    } else if (chartType === 'pie' || chartType === 'doughnut') {
-                        let value = data.datasets[tooltipItem.datasetIndex].data[tooltipItem.index];
-                        label += formatIndianNumber(value);
-                    } else {
-                        if (tooltipItem.yLabel !== null) {
-                            label += formatIndianNumber(tooltipItem.yLabel);
-                        }
-                    }
-                    
-                    return label;
-                }
-            }
-        };
+            };
         
         // Configure axes based on chart type
         if (chartType === 'bar' || chartType === 'horizontalBar') {
-            // For Chart.js v3+
             options.scales = {
                 x: {
                     grid: {
@@ -500,26 +473,12 @@ export const ChartGenerator = {
                 }
             };
             
-            // For Chart.js v2 compatibility
-            options.scales.xAxes = [{
-                gridLines: {
-                    display: false
-                }
-            }];
-            options.scales.yAxes = [{
-                ticks: {
-                    beginAtZero: true,
-                    callback: function(value) {
-                        return formatIndianNumber(value);
-                    }
-                },
-                gridLines: {
-                    color: 'rgba(0, 0, 0, 0.1)'
-                }
-            }];
+            // For horizontal bar charts in v3+
+            if (chartType === 'horizontalBar') {
+                options.indexAxis = 'y';
+            }
             
         } else if (chartType === 'stackedBar' || chartType === 'percentStackedBar') {
-            // For Chart.js v3+
             options.scales = {
                 x: {
                     stacked: true,
@@ -544,30 +503,6 @@ export const ChartGenerator = {
                     }
                 }
             };
-            
-            // For Chart.js v2 compatibility
-            options.scales.xAxes = [{
-                stacked: true,
-                gridLines: {
-                    display: false
-                }
-            }];
-            options.scales.yAxes = [{
-                stacked: true,
-                ticks: {
-                    beginAtZero: true,
-                    callback: function(value) {
-                        if (chartType === 'percentStackedBar') {
-                            return value + '%';
-                        } else {
-                            return formatIndianNumber(value);
-                        }
-                    }
-                },
-                gridLines: {
-                    color: 'rgba(0, 0, 0, 0.1)'
-                }
-            }];
             
             // For percentage stacked bar, add data labels
             if (chartType === 'percentStackedBar') {

@@ -192,21 +192,22 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
     # Create a new DataFrame with all x-axis values
     base_df = pd.DataFrame({x_axis: all_x_values})
     
-    # Start with first y-axis
-    pivoted_data = pd.pivot_table(df, values=y_axes[0]['column'], index=x_axis, aggfunc='sum')
-    pivoted_data = pivoted_data.reset_index()
+    # Process each y-axis separately with careful handling of NA values
+    pivoted_data = base_df.copy()
     
-    # Make sure we include all x-axis values
-    pivoted_data = pd.merge(base_df, pivoted_data, on=x_axis, how='left')
-    
-    # Add other y-axes
-    for i in range(1, len(y_axes)):
-        y_axis = y_axes[i]['column']
-        temp_pivot = pd.pivot_table(df, values=y_axis, index=x_axis, aggfunc='sum')
-        temp_pivot = temp_pivot.reset_index()
+    # Add datasets for each y-axis
+    for i, y_axis_info in enumerate(y_axes):
+        y_axis = y_axis_info.get('column')
+        
+        # Only use rows where this y_axis has data
+        valid_df = df.dropna(subset=[y_axis])
+        temp_pivot = valid_df.groupby(x_axis)[y_axis].sum().reset_index()
         
         # Make sure we include all x-axis values
         pivoted_data = pd.merge(pivoted_data, temp_pivot, on=x_axis, how='left')
+    
+    # Debug pivoted data
+    print(f"DEBUG: Stacked bar pivoted data structure: {pivoted_data}")
     
     # Create chart data structure
     chart_data = {
@@ -220,12 +221,29 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
         color = y_axis_info.get('color', f'rgba(75, 192, 192, {0.8 if i == 0 else 0.6})')
         
         values = []
-        for val in pivoted_data[y_axis].tolist():
+        for idx, val in enumerate(pivoted_data[y_axis].tolist()):
             # Preserve null/NaN values instead of converting to 0
             if pd.isna(val):
+                print(f"DEBUG: Found NaN value for {y_axis}, converting to None")
                 values.append(None)
             else:
-                values.append(val)
+                # Check if this is actually zero or was blank originally
+                if val == 0:
+                    # Check if this was a genuine zero by looking for data in original DataFrame
+                    x_val = pivoted_data[x_axis].iloc[idx]
+                    has_value = False
+                    for _, row in df.iterrows():
+                        if row[x_axis] == x_val and not pd.isna(row[y_axis]):
+                            has_value = True
+                            break
+                    
+                    if has_value:
+                        values.append(val)  # It's a real zero
+                    else:
+                        print(f"DEBUG: Found 0 but no matching data for {y_axis} at {x_val}, converting to None")
+                        values.append(None)  # It was blank/NA
+                else:
+                    values.append(val)
         
         # For percentage stacked bars, convert to percentages
         if chart_type == 'percentStackedBar':
@@ -234,7 +252,7 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
             for j, y_info in enumerate(y_axes):
                 y_col = y_info.get('column')
                 for k, val in enumerate(pivoted_data[y_col].tolist()):
-                    if not pd.isna(val):
+                    if not pd.isna(val) and val is not None:
                         totals[k] += abs(val)
             
             # Convert to percentages while preserving null values
@@ -248,6 +266,8 @@ def process_stacked_bar_chart(df, x_axis, y_axes, chart_type):
                     percent_values.append(0)
             
             values = percent_values
+        
+        print(f"DEBUG: Dataset for {y_axis}: {values}")
         
         dataset = {
             'label': y_axis,
@@ -271,6 +291,8 @@ def process_standard_chart(df, x_axis, y_axes, chart_type):
     # Get all unique x-axis values upfront to ensure consistent labels
     all_x_values = sorted(df[x_axis].dropna().unique().tolist())
     
+    print(f"DEBUG: Standard chart x-axis values: {all_x_values}")
+    
     chart_data = {
         'labels': all_x_values,
         'datasets': []
@@ -281,22 +303,50 @@ def process_standard_chart(df, x_axis, y_axes, chart_type):
         y_axis = y_axis_info.get('column')
         color = y_axis_info.get('color', f'rgba(75, 192, 192, {0.8 if i == 0 else 0.6})')
         
-        # Group by x-axis and sum y-values
-        grouped_data = df.groupby(x_axis)[y_axis].sum().reset_index()
-        
         # Create a dataframe with all possible x-axis values to handle missing values
         all_x = pd.DataFrame({x_axis: all_x_values})
         
+        # Group by x-axis and sum y-values but only for non-blank entries
+        # Filter out rows where y_axis is blank before grouping
+        valid_df = df.dropna(subset=[y_axis])
+        grouped_data = valid_df.groupby(x_axis)[y_axis].sum().reset_index()
+        
+        print(f"DEBUG: Standard chart grouped data for {y_axis}: {grouped_data}")
+        
         # Use left join but DON'T fill NaN values with 0
         merged_data = pd.merge(all_x, grouped_data, on=x_axis, how='left')
+        
+        print(f"DEBUG: Standard chart merged data for {y_axis}: {merged_data}")
         
         # Convert NaN to None in the dataset
         values = []
         for val in merged_data[y_axis].tolist():
             if pd.isna(val):
+                print(f"DEBUG: Found NaN value for {y_axis}, converting to None")
                 values.append(None)
             else:
-                values.append(val)
+                # Check if this is an empty string or actually zero
+                if isinstance(val, str) and val.strip() == '':
+                    print(f"DEBUG: Found empty string for {y_axis}, converting to None")
+                    values.append(None)
+                elif val == 0:
+                    # Check if this was a genuine zero or a blank/empty value that got converted
+                    # by looking at original data
+                    has_value = False
+                    for idx, row in df.iterrows():
+                        if row[x_axis] == merged_data[x_axis].iloc[values.__len__()] and not pd.isna(row[y_axis]):
+                            has_value = True
+                            break
+                    
+                    if has_value:
+                        values.append(val)  # It's a real zero
+                    else:
+                        print(f"DEBUG: Found 0 but no matching data for {y_axis}, converting to None")
+                        values.append(None)  # It was blank/NA
+                else:
+                    values.append(val)
+        
+        print(f"DEBUG: Final dataset for {y_axis}: {values}")
         
         dataset = {
             'label': y_axis,
